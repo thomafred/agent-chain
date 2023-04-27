@@ -1,0 +1,38 @@
+[tool.poetry]
+name = "agent-chain"
+version = "0.1.0"
+description = "Langchain colaborative agents"
+authors = ["Thomas Li Fredriksen <thomafred90@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "agent_chain"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+langchain = {extras = ["openai"], version = "^0.0.143"}
+typer = "^0.7.0"
+python-dotenv = "^1.0.0"
+pydantic = "^1.10.7"
+jinja2 = "^3.1.2"
+google-search-results = "^2.4.2"
+tiktoken = "^0.3.3"
+redis = "^4.5.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.flake8]
+ignore = ["E203", "E731", "W503"]
+per-file-ignores = ["*/__init__.py:F401", "tests/*:F841"]
+max-line-length = 120
+count = true
+
+[tool.isort]
+line_length=120                # corresponds to -w  flag
+multi_line_output=3            # corresponds to -m  flag
+include_trailing_comma=true    # corresponds to -tc flag
+profile="black"
+known_local_folder="odp,tests"
+
