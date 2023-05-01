@@ -1,5 +1,6 @@
 import random
 import string
+from textwrap import dedent
 
 import dotenv
 import typer
@@ -20,9 +21,17 @@ app = typer.Typer()
 wikipedia = WikipediaAPIWrapper()
 
 wikipedia_tool = Tool(
-    name="wikipedia",
+    name="Wikipedia",
     func=wikipedia.run,
-    description="Search Wikipedia for a topic",
+    description=dedent(
+        """
+        Allows you to search for topics on Wikipedia, an extensive and widely-used online encyclopedia that provides
+        free access to millions of articles written collaboratively by volunteers.
+        
+        Use this function to quickly access information about a wide range of subjects, from historical events to
+        scientific concepts, biographies, and more.
+        """
+    )
 )
 
 

@@ -4,7 +4,7 @@ from textwrap import dedent
 from typing import Any, Callable, Dict, List, Optional
 
 from langchain import PromptTemplate
-from langchain.agents import Tool
+from langchain.agents import Tool, ZeroShotAgent, AgentExecutor
 from langchain.chains import LLMChain
 from langchain.chains.base import Chain
 from langchain.llms.base import BaseLLM
@@ -14,6 +14,35 @@ from pydantic import BaseModel, Field, PrivateAttr
 from .tools_prompt_template import ToolsPromptTemplate
 
 LOG = logging.getLogger(__name__)
+
+
+class TodoChain(LLMChain):
+
+    @classmethod
+    def from_llm(cls, llm: LLMChain, verbose: bool = False) -> "TodoChain":
+        todo_prompt = PromptTemplate.from_template(dedent(
+            """
+            You are a planner who is an expert at coming up with a todo list for a given objective.
+            Come up with a todo list for this objective: {objective}
+            """
+        ))
+        
+        return cls(llm=llm, prompt=todo_prompt, verbose=verbose)
+
+    def as_tool(self) -> Tool:
+        return Tool(
+            name="TODO",
+            func=self.run,
+            description=dedent(
+                """
+                Useful for when you need to come up with todo lists.
+                Input: an objective to create a todo list for.
+                Output: a todo list for that objective.
+                
+                Please be very clear what the objective is!
+                """
+            )
+        )
 
 
 class TaskCreationChain(LLMChain):
@@ -64,7 +93,7 @@ class TaskPrioritizationChain(LLMChain):
         return cls(llm=llm, prompt=prompt, verbose=verbose)
 
 
-class ExecutionChain(LLMChain):
+class ExecutionChain(ZeroShotAgent):
     """Chain for task execution."""
 
     @classmethod
@@ -75,36 +104,34 @@ class ExecutionChain(LLMChain):
         verbose: bool = False,
     ) -> "ExecutionChain":
         """Get the response parser"""
-        execution_template = dedent(
+
+        prefix = dedent(
             """
             You are an AI who performs one task based on the following objective: {objective}.
-            You have access to the following tools:
-
-            {tools}.
-
-            Use the following format:
-            Objective: The objective you are trying to solve
-            Thought: You should always think about what to do
-            Action: The action to take, should be on of [{tool_names}]
-            Action Input: The input to the action
-            Observation: the result of the action
-            ... (this Thought/Action/Action Input/Observation can repeat N times)
-            Final Answer: The final answer to the objective if you believe you have completed it
-
             Take into account these previously completed tasks: {context}.
-
-            Begin!
-
-            Your task: {task}.
+            """
+        )
+        suffix = dedent(
+            """
+            Question: {task}
             {agent_scratchpad}
-        """
+            """
         )
 
-        prompt = ToolsPromptTemplate(
-            template=execution_template, input_variables=["task", "context", "objective"], tools=tools
+        prompt = cls.create_prompt(
+            tools,
+            prefix=prefix,
+            suffix=suffix,
+            input_variables=["objective", "task", "context", "agent_scratchpad"]
         )
 
-        return cls(llm=llm, prompt=prompt, verbose=verbose)
+        llm_chain = LLMChain(llm=llm, prompt=prompt, verbose=verbose)
+        allowed_tools = [tool.name for tool in tools]
+
+        return cls(
+            llm_chain=llm_chain,
+            allowed_tools=allowed_tools,
+        )
 
 
 def get_next_task(
@@ -174,14 +201,14 @@ def execute_task(vectorstore: VectorStore, execution_chain: LLMChain, objective:
     """Execute the task"""
 
     context = _get_top_tasks(vectorstore, objective, k=k)
-    return execution_chain.run(objective=objective, context=context, task=task, intermediate_steps=[])
+    return execution_chain.run(objective=objective, context=context, task=task)
 
 
 class BabyAGI(Chain, BaseModel):
     task_list: deque = Field(default_factory=deque)
     task_creation_chain: TaskCreationChain = Field(...)
     task_prioritization_chain: TaskPrioritizationChain = Field(...)
-    task_execution_chain: ExecutionChain = Field(...)
+    task_execution_chain: AgentExecutor = Field(...)
     vectorstore: VectorStore = Field(...)
 
     max_iterations: Optional[int] = 10
@@ -270,20 +297,36 @@ class BabyAGI(Chain, BaseModel):
 
         return {}
 
+    @staticmethod
+    def _create_todo_tool() -> Tool:
+        """Create the todo tool"""
+
+        Tool(
+            name="TODO",
+            func=todo_chain.run,
+            description="useful for when you need to come up with todo lists. Input: an objective to create a todo list for. Output: a todo list for that objective. Please be very clear what the objective is!",
+        ),
     @classmethod
     def from_llm(
         cls, llm: BaseLLM, vectorstore: VectorStore, tools: List[Tool], verbose: bool = False, **kwargs
     ) -> "BabyAGI":
         """Initialize the BabyAGI Controller"""
 
+        todo_tool = TodoChain.from_llm(llm, verbose=True).as_tool()
+        tools = tools + [todo_tool]
+
         task_creation_chain = TaskCreationChain.from_llm(llm, verbose=verbose)
         task_prioritization_chain = TaskPrioritizationChain.from_llm(llm, verbose=verbose)
         execution_chain = ExecutionChain.from_llm(llm, tools=tools, verbose=verbose)
 
+        executor = AgentExecutor.from_agent_and_tools(
+            agent=execution_chain, tools=tools, verbose=True
+        )
+
         return cls(
             task_creation_chain=task_creation_chain,
             task_prioritization_chain=task_prioritization_chain,
-            task_execution_chain=execution_chain,
+            task_execution_chain=executor,
             vectorstore=vectorstore,
             **kwargs,
         )
