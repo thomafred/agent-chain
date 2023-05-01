@@ -1,10 +1,9 @@
 import random
 import string
-from textwrap import dedent
 
 import dotenv
 import typer
-from langchain.agents import AgentType, Tool, initialize_agent, load_tools
+from langchain.agents import AgentType, initialize_agent, load_tools
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.llms import OpenAI
 from langchain.memory import ChatMessageHistory
@@ -14,7 +13,7 @@ from langchain.vectorstores.redis import Redis
 
 from .baby_agi import BabyAGI
 from .factories import ObjectFactoryRegistry
-from .tools import Wikipedia
+from .tools import Wikipedia, SerpApi, FileWriteTool
 
 app = typer.Typer()
 
@@ -84,7 +83,11 @@ def baby_agi(
         verbose=verbose,
         max_iterations=max_iterations,
         vectorstore=vectorstore,
-        tools=[Wikipedia().as_tool()],
+        tools=[
+            Wikipedia().as_tool(),
+            SerpApi().as_tool(),
+            FileWriteTool(),
+        ],
     )
 
     agent({"objective": objective})

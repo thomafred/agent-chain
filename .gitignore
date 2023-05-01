@@ -164,3 +164,6 @@ test-report.xml
 
 # User tokens
 .token_cache.bin
+
+# Generated files
+bin/
