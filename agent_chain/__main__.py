@@ -9,30 +9,14 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.llms import OpenAI
 from langchain.memory import ChatMessageHistory
 from langchain.schema import messages_to_dict
-from langchain.utilities import WikipediaAPIWrapper
 from langchain.vectorstores import VectorStore
 from langchain.vectorstores.redis import Redis
 
 from .baby_agi import BabyAGI
 from .factories import ObjectFactoryRegistry
+from .tools import Wikipedia
 
 app = typer.Typer()
-
-wikipedia = WikipediaAPIWrapper()
-
-wikipedia_tool = Tool(
-    name="Wikipedia",
-    func=wikipedia.run,
-    description=dedent(
-        """
-        Allows you to search for topics on Wikipedia, an extensive and widely-used online encyclopedia that provides
-        free access to millions of articles written collaboratively by volunteers.
-        
-        Use this function to quickly access information about a wide range of subjects, from historical events to
-        scientific concepts, biographies, and more.
-        """
-    )
-)
 
 
 @app.command()
@@ -100,7 +84,7 @@ def baby_agi(
         verbose=verbose,
         max_iterations=max_iterations,
         vectorstore=vectorstore,
-        tools=[wikipedia_tool],
+        tools=[Wikipedia().as_tool()],
     )
 
     agent({"objective": objective})
