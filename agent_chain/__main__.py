@@ -1,15 +1,29 @@
+import random
+import string
+
 import dotenv
 import typer
-from langchain.agents import AgentType, initialize_agent, load_tools
+from langchain.agents import AgentType, Tool, initialize_agent, load_tools
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.llms import OpenAI
 from langchain.memory import ChatMessageHistory
 from langchain.schema import messages_to_dict
+from langchain.utilities import WikipediaAPIWrapper
+from langchain.vectorstores import VectorStore
 from langchain.vectorstores.redis import Redis
 
 from .baby_agi import BabyAGI
+from .factories import ObjectFactoryRegistry
 
 app = typer.Typer()
+
+wikipedia = WikipediaAPIWrapper()
+
+wikipedia_tool = Tool(
+    name="wikipedia",
+    func=wikipedia.run,
+    description="Search Wikipedia for a topic",
+)
 
 
 @app.command()
@@ -47,7 +61,15 @@ def baby_agi(
     verbose: bool = False,
     embedding_size: int = 1536,
 ):
-    embeddings_model = OpenAIEmbeddings(client="", openai_api_key=openapi_key)
+    ObjectFactoryRegistry.add(OpenAIEmbeddings, client="", openai_api_key=openapi_key)
+    ObjectFactoryRegistry.add(
+        Redis,
+        redis_url="redis://localhost:6379",
+        index_name=lambda: "".join(random.sample(string.ascii_lowercase, 8)),
+        index_cls=VectorStore,
+    )
+
+    embeddings_model = ObjectFactoryRegistry.fetch(OpenAIEmbeddings)()
 
     vectorstore = Redis.from_texts(
         redis_url="redis://localhost:6379",
@@ -69,6 +91,7 @@ def baby_agi(
         verbose=verbose,
         max_iterations=max_iterations,
         vectorstore=vectorstore,
+        tools=[wikipedia_tool],
     )
 
     agent({"objective": objective})

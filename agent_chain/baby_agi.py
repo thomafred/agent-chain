@@ -1,13 +1,17 @@
 import logging
 from collections import deque
+from textwrap import dedent
 from typing import Any, Callable, Dict, List, Optional
 
 from langchain import PromptTemplate
+from langchain.agents import Tool
 from langchain.chains import LLMChain
 from langchain.chains.base import Chain
 from langchain.llms.base import BaseLLM
 from langchain.vectorstores.base import VectorStore
 from pydantic import BaseModel, Field, PrivateAttr
+
+from .tools_prompt_template import ToolsPromptTemplate
 
 LOG = logging.getLogger(__name__)
 
@@ -64,23 +68,48 @@ class ExecutionChain(LLMChain):
     """Chain for task execution."""
 
     @classmethod
-    def from_llm(cls, llm: BaseLLM, verbose: bool = False) -> "ExecutionChain":
+    def from_llm(
+        cls,
+        llm: BaseLLM,
+        tools: List[Tool],
+        verbose: bool = False,
+    ) -> "ExecutionChain":
         """Get the response parser"""
-        execution_template = (
-            "You are an AI who performs one task based on the following objective: {objective}."
-            " Take into account these previously completed tasks: {context}."
-            " Your task: {task}."
-            " Response:"
+        execution_template = dedent(
+            """
+            You are an AI who performs one task based on the following objective: {objective}.
+            You have access to the following tools:
+
+            {tools}.
+
+            Use the following format:
+            Objective: The objective you are trying to solve
+            Thought: You should always think about what to do
+            Action: The action to take, should be on of [{tool_names}]
+            Action Input: The input to the action
+            Observation: the result of the action
+            ... (this Thought/Action/Action Input/Observation can repeat N times)
+            Final Answer: The final answer to the objective if you believe you have completed it
+
+            Take into account these previously completed tasks: {context}.
+
+            Begin!
+
+            Your task: {task}.
+            {agent_scratchpad}
+        """
         )
 
-        prompt = PromptTemplate(template=execution_template, input_variables=["task", "context", "objective"])
+        prompt = ToolsPromptTemplate(
+            template=execution_template, input_variables=["task", "context", "objective"], tools=tools
+        )
 
         return cls(llm=llm, prompt=prompt, verbose=verbose)
 
 
 def get_next_task(
     task_creation_chain: LLMChain,
-    result: Dict,
+    result: str,
     task_description: str,
     task_list: List[str],
     objective: str,
@@ -126,7 +155,7 @@ def prioritize_tasks(
     return prioritized_task_list
 
 
-def _get_top_tasks(vectorstore, query: str, k: int) -> List[str]:
+def _get_top_tasks(vectorstore: VectorStore, query: str, k: int) -> List[str]:
     """Get the top k tasks based on the query"""
 
     results = vectorstore.similarity_search_with_score(query, k=k)
@@ -141,11 +170,11 @@ def _get_top_tasks(vectorstore, query: str, k: int) -> List[str]:
     return ret
 
 
-def execute_task(vectorstore, execution_chain: LLMChain, objective: str, task: str, k: int = 5) -> str:
+def execute_task(vectorstore: VectorStore, execution_chain: LLMChain, objective: str, task: str, k: int = 5) -> str:
     """Execute the task"""
 
     context = _get_top_tasks(vectorstore, objective, k=k)
-    return execution_chain.run(objective=objective, context=context, task=task)
+    return execution_chain.run(objective=objective, context=context, task=task, intermediate_steps=[])
 
 
 class BabyAGI(Chain, BaseModel):
@@ -242,12 +271,14 @@ class BabyAGI(Chain, BaseModel):
         return {}
 
     @classmethod
-    def from_llm(cls, llm: BaseLLM, vectorstore: VectorStore, verbose: bool = False, **kwargs) -> "BabyAGI":
+    def from_llm(
+        cls, llm: BaseLLM, vectorstore: VectorStore, tools: List[Tool], verbose: bool = False, **kwargs
+    ) -> "BabyAGI":
         """Initialize the BabyAGI Controller"""
 
         task_creation_chain = TaskCreationChain.from_llm(llm, verbose=verbose)
         task_prioritization_chain = TaskPrioritizationChain.from_llm(llm, verbose=verbose)
-        execution_chain = ExecutionChain.from_llm(llm, verbose=verbose)
+        execution_chain = ExecutionChain.from_llm(llm, tools=tools, verbose=verbose)
 
         return cls(
             task_creation_chain=task_creation_chain,
