@@ -15,7 +15,7 @@ from langchain.vectorstores.redis import Redis
 
 from .baby_agi import BabyAGI
 from .factories import ObjectFactoryRegistry
-from .tools import FileWriteTool, SerpApi, Wikipedia
+from .tools import FileWriteTool, SerpApi, TodoChain, Wikipedia, dbpedia, ocean_info_hub
 
 app = typer.Typer()
 
@@ -134,6 +134,9 @@ def auto_gpt(
         tools=[
             SerpApi().as_tool(),
             FileWriteTool(),
+            ocean_info_hub.as_tool(),
+            dbpedia.as_tool(),
+            TodoChain.from_llm(llm).as_tool(),
         ],
         llm=llm,
         memory=vectorstore.as_retriever(),
