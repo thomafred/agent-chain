@@ -4,7 +4,9 @@ import string
 import dotenv
 import typer
 from langchain.agents import AgentType, initialize_agent, load_tools
+from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
+from langchain.experimental import AutoGPT
 from langchain.llms import OpenAI
 from langchain.memory import ChatMessageHistory
 from langchain.schema import messages_to_dict
@@ -13,7 +15,7 @@ from langchain.vectorstores.redis import Redis
 
 from .baby_agi import BabyAGI
 from .factories import ObjectFactoryRegistry
-from .tools import Wikipedia, SerpApi, FileWriteTool
+from .tools import FileWriteTool, SerpApi, Wikipedia
 
 app = typer.Typer()
 
@@ -91,6 +93,56 @@ def baby_agi(
     )
 
     agent({"objective": objective})
+
+
+@app.command()
+def auto_gpt(
+    objective: str,
+    openapi_key: str = typer.Argument("openapi-key", envvar="OPENAI_API_KEY"),
+    max_iterations: int = 5,
+    max_tokens: int = 1000,
+    temperature: float = 0.0,
+    verbose: bool = False,
+):
+    ObjectFactoryRegistry.add(OpenAIEmbeddings, client="", openai_api_key=openapi_key)
+    ObjectFactoryRegistry.add(
+        Redis,
+        redis_url="redis://localhost:6379",
+        index_name=lambda: "".join(random.sample(string.ascii_lowercase, 8)),
+        index_cls=VectorStore,
+    )
+
+    embeddings_model = ObjectFactoryRegistry.fetch(OpenAIEmbeddings)()
+
+    vectorstore = Redis.from_texts(
+        redis_url="redis://localhost:6379",
+        index_name="baby_agi",
+        embedding=embeddings_model,
+        texts=["My wife's name is Xingyi"],
+    )
+
+    llm = ChatOpenAI(
+        client="",
+        openai_api_key=openapi_key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+    agent = AutoGPT.from_llm_and_tools(
+        ai_name="Jarvis",
+        ai_role="assistant",
+        tools=[
+            SerpApi().as_tool(),
+            FileWriteTool(),
+        ],
+        llm=llm,
+        memory=vectorstore.as_retriever(),
+    )
+
+    if verbose:
+        agent.chain.verbose = True
+
+    agent.run([objective])
 
 
 if __name__ == "__main__":

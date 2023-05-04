@@ -9,7 +9,7 @@ packages = [{include = "agent_chain"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-langchain = {extras = ["openai"], version = "^0.0.143"}
+langchain = {extras = ["openai"], version = "^0.0.157"}
 typer = "^0.7.0"
 python-dotenv = "^1.0.0"
 pydantic = "^1.10.7"
