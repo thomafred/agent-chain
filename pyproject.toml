@@ -21,6 +21,8 @@ wikipedia = "^1.4.0"
 fsspec = "^2023.4.0"
 rdflib = "^6.3.2"
 sparqlwrapper = "^2.0.0"
+typing-extensions = "^4.5.0"
+beautifulsoup4 = "^4.12.2"
 
 
 [build-system]

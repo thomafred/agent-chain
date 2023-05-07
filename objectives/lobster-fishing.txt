@@ -1,0 +1,4 @@
+Research the best places to fish for lobster around Norway.
+Prioritize using Ocean Info Hub, but research the Ocean Info Hub graph before attempting any queries.
+Make a todo-list before anything else.
+Write results to file
