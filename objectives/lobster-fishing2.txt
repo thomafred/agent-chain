@@ -1,0 +1,5 @@
+Research the best places to fish for lobster around the Vindafjord area in Norway.
+The final priority is to come up with a strategy for catching the lobster in the most efficient way possible.
+We have a boat and 10 lobster traps at our disposal.
+Make a todo-list before anything else.
+Write results to file

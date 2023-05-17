@@ -14,6 +14,8 @@ from langchain.llms import OpenAI
 from langchain.vectorstores import VectorStore
 from langchain.vectorstores.redis import Redis
 
+from agent_chain.plan_and_execute import PlanAndExecuteAgent
+
 from .baby_agi import BabyAGI
 from .factories import ObjectFactoryRegistry
 from .tools import FileWriteTool, SerpApi, TodoChain, Wikipedia, dbpedia, ocean_info_hub
@@ -98,6 +100,31 @@ def baby_agi(
     )
 
     agent({"objective": objective})
+
+
+@app.command()
+def pae(
+    objective: Optional[str] = None,
+    objective_file: Optional[Path] = None,
+    max_tokens: int = 1000,
+    temperature: float = 0.0,
+    verbose: bool = False,
+):
+    objective = _load_objective(objective, objective_file)
+    llm = ObjectFactoryRegistry.fetch(OpenAI)(temperature=temperature, max_tokens=max_tokens)
+
+    agent = PlanAndExecuteAgent.from_llm(
+        llm=llm,
+        tools=[
+            SerpApi().as_tool(),
+            FileWriteTool(),
+            ocean_info_hub.as_tool(),
+            dbpedia.as_tool(),
+        ],
+        verbose=verbose,
+    )
+
+    agent.run([objective])
 
 
 @app.command()
